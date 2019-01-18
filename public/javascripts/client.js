@@ -95,7 +95,7 @@ $( document ).ready(function() {
         $('.not_logged').hide();
 
         loadRandomVideo(); 
-        loadSubscriptions(); 
+        //loadSubscriptions(); 
       } else {
         $('.is_logged').hide();
         $('.not_logged').show();
