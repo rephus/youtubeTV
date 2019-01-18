@@ -1,30 +1,72 @@
-function onPlayerReady(event) {
-  event.target.playVideo();
-  console.log("Player ready"); 
+/**
+ * Get or create userId to authenticate users agains the server
+ */
+function guid() {
+  function s4() {
+    return Math.floor((1 + Math.random()) * 0x10000).toString(16).substring(1);
+  }
+  return s4() + s4() + '-' + s4() + '-' + s4() + '-' + s4() + '-' + s4() + s4() + s4();
+}
+var userId = localStorage.getItem("userId");
+if (!userId) {
+  userId = guid(); 
+  localStorage.setItem("userId", userId);
 }
 
-function onPlayerStateChange(event) {
-  /*YT.PlayerState.UNSTARTED
-    YT.PlayerState.ENDED
-    YT.PlayerState.PLAYING
-    YT.PlayerState.PAUSED
-    YT.PlayerState.BUFFERING
-    YT.PlayerState.CUED*/
-  console.log("Player state change " + event.data) ; 
-  if (event.data == YT.PlayerState.ENDED) loadRandomVideo();
-  //player.stopVideo();
+
+/**
+ * Send to the server the list of channels that we don't want to 
+ * show on the random selection of videos
+ */
+var updateChannels = () => {
+  var disabledSubsciptions = $(".subscription.not_active");
+  var channels = []; 
+  for (var i =0 ; i <disabledSubsciptions.length; i++){
+    var channel = disabledSubsciptions[i].id; 
+    channels.push(channel); 
+  }  
+  $.ajax({
+    type: "POST",
+    url: '/subscriptions?user_id='+userId,
+    traditional: true,
+    data: {'channels': channels, 'foo': 'bar'}
+  });
 }
 
+/**
+ * Get all subscriptions from the user so he can 
+ * select which subscriptions want to disable from the random
+ */
+var loadSubscriptions = () => {
+  $.getJSON('/subscriptions?user_id='+userId, function(result){
+    var $div = $("#subscriptions");
+    for (var i = 0 ; i < result.length; i++) {
+      var subscription = result[i];
+      var thumbnail = subscription.snippet.thumbnails.default.url; 
+      var title = subscription.snippet.title;
+      var channelId = subscription.snippet.resourceId.channelId; 
+      var $button = $("<a href='#' id='"+channelId+"' class='subscription active'><img src='"+thumbnail+"'/> "+title+"</a>")
+      $button.click(function(){
+        $(this).toggleClass("active");
+        $(this).toggleClass("not_active");
+
+        updateChannels(); 
+      });
+      $div.append($button); 
+    }
+  });
+}
+/**
+ * Get a random video from the subscriptions
+ */
 var loadRandomVideo = () => {
   //Remove old iframe if exists and reload div
   $('.videoWrapper').html(     
      '<div id="player"></div>'
   );
-  const url = '/random';
+  const url = '/random?user_id='+userId;
   $.getJSON(url, function(result){
     var videoId = result.contentDetails.videoId; 
-    console.log("Loaded video " + videoId); 
-
     $("#channel").html(result.snippet.channelTitle); 
     $("#video").html(result.snippet.title); 
     
@@ -35,30 +77,35 @@ var loadRandomVideo = () => {
       width: '640',
       videoId: videoId,
       events: {
-        'onReady': onPlayerReady,
-        'onStateChange': onPlayerStateChange
+        'onReady': function(event){event.target.playVideo()},
+        'onStateChange': function onPlayerStateChange(event) {
+          if (event.data == YT.PlayerState.ENDED) loadRandomVideo();
+        }
       }
     });
-
   });
 }
 
 $( document ).ready(function() {
-  loadRandomVideo(); 
-  $('#next').click(loadRandomVideo); 
-  
-  var tag = document.createElement('script');
 
-  tag.src = "https://www.youtube.com/iframe_api";
-  var firstScriptTag = document.getElementsByTagName('script')[0];
-  firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+  $('#login').attr('href', '/login?user_id='+userId); 
+  $.getJSON('/is_logged?user_id='+userId, function(result){
+      if(result.is_logged) {
+        $('.is_logged').show();
+        $('.not_logged').hide();
+
+        loadRandomVideo(); 
+        loadSubscriptions(); 
+      } else {
+        $('.is_logged').hide();
+        $('.not_logged').show();
+      }
+  });
+
+  $('#next').click(loadRandomVideo); 
 
   function onYouTubeIframeAPIReady() {
     loadRandomVideo();     
   }
 
-});
-
-$('#login').click(function() {
-  //TODO Login
 });

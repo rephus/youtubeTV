@@ -8,22 +8,22 @@
     <script src="https://www.youtube.com/iframe_api"></script>
     
     <script src="javascripts/client.js"></script>
-    
   </head>
   <body>
 
-     <a href="/login">Login</a>
-
-     <h1 id="channel"></h1>
-     <h2 id="video"></h2>
-     <div class="videoWrapper">
-<!--
-      <iframe id='iframe' width="100%" height="auto" 
-        src="https://www.youtube.com/embed/" frameborder="0" 
-        allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" allowfullscreen>
-      </iframe>-->
+    <div class='not_logged'>
+     <a id='login' href="/login">Login</a>
+    </div>
+    <div class='is_logged'>
+      
+      <h1 id="channel"></h1>
+      <h2 id="video"></h2>
+      <div class="videoWrapper">
     </div>
     
       <button id='next'>Next</button>
+      <div id='subscriptions'>
+       </div>
+    </div>
   </body>
 </html>

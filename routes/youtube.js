@@ -9,7 +9,6 @@ var OAuth2 = google.auth.OAuth2;
 // at ~/.credentials/youtube-nodejs-quickstart.json
 var SCOPES = ['https://www.googleapis.com/auth/youtube.readonly'];
 var TOKEN_DIR =  '.credentials/';
-var TOKEN_PATH = TOKEN_DIR + 'youtube-nodejs-quickstart.json';
 
 
 /**
@@ -19,56 +18,41 @@ var TOKEN_PATH = TOKEN_DIR + 'youtube-nodejs-quickstart.json';
  * @param {Object} credentials The authorization client credentials.
  * @param {function} callback The callback to call with the authorized client.
  */
-function authorize(credentials, requestData, callback, nextCallback) {
+function  authorize(userId, credentials, requestData, callback, nextCallback) {
   var clientSecret = credentials.installed.client_secret;
   var clientId = credentials.installed.client_id;
   var redirectUrl = credentials.installed.redirect_uris[0];
   var oauth2Client = new OAuth2(clientId, clientSecret, redirectUrl);
 
   // Check if we have previously stored a token.
-  fs.readFile(TOKEN_PATH, function(err, token) {
-    if (err) {
-      //TODO add callbacks here
-      console.log("get new token"); 
-      getNewToken(oauth2Client, callback);
-    } else {
-      oauth2Client.credentials = JSON.parse(token);
-      console.log("Got credentials, calling callback ", requestData); 
-      
-      callback(oauth2Client, requestData, nextCallback);
-    }
-  });
-}
+  var filename = TOKEN_DIR + "youtube-"+userId+".json";   
+  fs.readFile(filename, function(err, token) {
 
-/**
- * Get and store new token after prompting for user authorization, and then
- * execute the given callback with the authorized OAuth2 client.
- *
- * @param {google.auth.OAuth2} oauth2Client The OAuth2 client to get token for.
- * @param {getEventsCallback} callback The callback to call with the authorized
- *     client.
- */
-function getNewToken(oauth2Client, callback) {
-  var authUrl = oauth2Client.generateAuthUrl({
-    access_type: 'offline',
-    scope: SCOPES
-  });
-  console.log('Authorize this app by visiting this url: ', authUrl);
-  var rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
-  });
-  rl.question('Enter the code from that page here: ', function(code) {
-    rl.close();
-    oauth2Client.getToken(code, function(err, token) {
-      if (err) {
-        console.log('Error while trying to retrieve access token', err);
-        return;
+    if (err) {
+      console.log("Token doesn't exist, need to login first"); 
+      return; 
+    } else {
+      var time = new Date().getTime(); 
+      oauth2Client.credentials = JSON.parse(token);      
+      
+      if (oauth2Client.credentials.expiry_date < time){
+        console.log("Token has already expired, refreshing token");
+        //fs.unlink(filename); 
+        oauth2Client.refreshToken(oauth2Client.credentials.refresh_token).then(function(tokens, res){
+          
+          var newToken =  tokens.tokens;
+          newToken['refresh_token'] = oauth2Client.credentials.refresh_token;
+          storeToken(userId, newToken); 
+          oauth2Client.credentials =  newToken; 
+
+          callback(oauth2Client, requestData, nextCallback);
+        });
+      } else {
+        console.log("Got credentials, calling callback ", requestData); 
+        callback(oauth2Client, requestData, nextCallback);
       }
-      oauth2Client.credentials = token;
-      storeToken(token);
-      callback(oauth2Client);
-    });
+     
+    }
   });
 }
 
@@ -77,7 +61,7 @@ function getNewToken(oauth2Client, callback) {
  *
  * @param {Object} token The token to store to disk.
  */
-function storeToken(token) {
+function storeToken(userId, token) {
   try {
     fs.mkdirSync(TOKEN_DIR);
   } catch (err) {
@@ -85,10 +69,10 @@ function storeToken(token) {
       throw err;
     }
   }
-  token.expiry_date = 1894842636000; //Set expiry to 2030
-  fs.writeFile(TOKEN_PATH, JSON.stringify(token), (err) => {
+  var filename = TOKEN_DIR + "youtube-"+userId+".json"; 
+  fs.writeFile(filename, JSON.stringify(token), (err) => {
     if (err) throw err;
-    console.log('Token stored to ' + TOKEN_PATH);
+    console.log('Token stored to ' + filename);
   });
 }
 
@@ -157,12 +141,97 @@ var router = express.Router();
 
 var randomArray = (array) => {
   return array[Math.floor(Math.random()*array.length)];
-  
 }
 
-/* GET home page. */
-router.get('/random', function(req, res, next) {
+router.get('/login', function(req, res) {
+  var userId = req.query.user_id; 
+  fs.readFile('client_secret.json', function processClientSecrets(err, content) {
+    var credentials = JSON.parse(content); 
+    var clientSecret = credentials.installed.client_secret;
+    var clientId = credentials.installed.client_id;
+    var redirectUrl = credentials.installed.redirect_uris[0];  
+    var oauth2Client = new OAuth2(clientId, clientSecret, redirectUrl);
+    
+    var authUrl = oauth2Client.generateAuthUrl({
+      access_type: 'offline',
+      scope: SCOPES, 
+      state: userId , 
+      prompt: "consent"
+      //approval_prompt: "force"
+    });
+    res.redirect(authUrl);
 
+  });
+});
+
+router.get('/login_callback', function(req, res) {
+  var code = req.query.code; 
+  var userId =  req.query.state; 
+  fs.readFile('client_secret.json', function processClientSecrets(err, content) {
+    var credentials = JSON.parse(content); 
+    var clientSecret = credentials.installed.client_secret;
+    var clientId = credentials.installed.client_id;
+    var redirectUrl = credentials.installed.redirect_uris[0];  
+    var oauth2Client = new OAuth2(clientId, clientSecret, redirectUrl);
+
+    oauth2Client.getToken(code, function(err, token) {
+      if (err) {
+        console.log('Error while trying to retrieve access token', err);
+        return;
+      }
+      oauth2Client.credentials = token;
+      storeToken(userId, token);
+      res.redirect('/');
+    });
+  });
+});
+
+router.get('/is_logged', function(req, res) {
+  var userId = req.query.user_id;   
+  var filename = TOKEN_DIR + "youtube-"+userId+".json";     
+  fs.readFile(filename, function(err, token) {
+      res.json({'is_logged': err?false:true});
+  });
+
+});
+
+router.post('/subscriptions', function(req, res){
+  var userId = req.query.user_id;     
+  var channels = req.body.channels; 
+  console.log("Disabling channels ", channels);
+  res.json({});
+});
+
+router.get('/subscriptions', function(req, res){
+  var userId = req.query.user_id;   
+  
+  fs.readFile('client_secret.json', function processClientSecrets(err, content) {
+    if (err) {
+      console.log('Error loading client secret file: ' + err);
+      return;
+    }
+    var getSubscriptionCallback = (auth,subscriptions) => {
+      res.json(subscriptions.items); 
+    }
+    var requestParams = { 'params':  {
+      'mine': 'true', 
+      'part': 'snippet', 
+      'maxResults': 25,
+      //pageToken:  nextPageToken,
+    }}; 
+    authorize(userId, 
+      JSON.parse(content),  
+      requestParams ,
+      getSubscriptions, 
+      getSubscriptionCallback
+    );
+  });
+
+});
+
+router.get('/random', function(req, res, next) {
+  var userId = req.query.user_id;   
+  
     // Load client secrets from a local file.
   fs.readFile('client_secret.json', function processClientSecrets(err, content) {
     if (err) {
@@ -210,7 +279,8 @@ router.get('/random', function(req, res, next) {
       'maxResults': 25,
       //pageToken:  nextPageToken,
     }}; 
-    authorize(JSON.parse(content),  
+    authorize(userId, 
+      JSON.parse(content),  
       requestParams ,
       getSubscriptions, 
       getSubscriptionCallback

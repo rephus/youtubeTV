@@ -58,3 +58,30 @@ input {
 	width: 100%;
 	height: 100%;
 }
+
+.not_logged {}
+
+.is_logged {
+  display:none; 
+}
+
+.subscription {
+  padding: 10px;
+  border-radius: 10px;
+  color: white;
+  text-decoration: none;
+}
+
+.subscription img {
+  width:24px;
+  height:24px;  
+
+}
+
+.not_active {
+  background-color: gray; 
+  
+}
+.active {
+  background-color: green; 
+}
